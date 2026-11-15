@@ -2,14 +2,14 @@
 
 **Gotoo PC Bench** est une application locale écrite en Go pour **consulter, analyser et comparer des campagnes de benchmark matériel** depuis une CLI et une interface Web.
 
-**État actuel : visualisation et comparaison + runners CPU et mémoire Linux en CLI (PR #5 fusionnée).** Le projet importe les rapports historiques et les résultats JSON v1, et peut convertir les premiers vers le second. Le serveur Web reste **strictement en lecture seule**.
+**État actuel : visualisation, comparaison et runners CLI Linux CPU, mémoire et FFmpeg (PR #7 en revue).** Le projet importe les rapports historiques et les résultats JSON v1, et peut convertir les premiers vers le second. Le serveur Web reste **strictement en lecture seule**.
 
 Les anciens scripts Bash ne sont **pas inclus dans le dépôt** : ils restent une source historique de rapports, sans être nécessaires aux nouveaux runners Go.
 
 ## Périmètre livré
 
 - Une application Go, avec serveur HTTP local et ressources HTML/CSS/JS intégrées au binaire via `embed`.
-- Une CLI capable de vérifier Sysbench et d’exécuter séparément ou ensemble deux protocoles fixes sur Linux : **CPU** (1/4/8 threads, 30 s, nombres premiers jusqu’à 10000) et **mémoire en écriture** (1/4 threads, blocs 1 KiB, limite 1 TiB, 15 s), puis d’enregistrer un rapport JSON v1.
+- Une CLI Linux exécutant trois protocoles fixes, séparément ou ensemble : **CPU** (1/4/8 threads, 30 s, nombres premiers jusqu’à 10000), **mémoire en écriture** (1/4 threads, blocs 1 KiB, limite 1 TiB, 15 s) et **FFmpeg/libx264** (1/4/8 threads, source FFV1 640×360/30 fps/20 s, preset medium, CRF 23, sortie null), puis enregistrant un rapport JSON v1.
 - Aucun framework ou service externe, aucune base SQL, aucun réseau sortant.
 - Lecture des fichiers `rapport_*.txt` et `rapport_*.json` du dossier choisi, affichage de la configuration CPU/RAM/OS et des valeurs de CPU, RAM, FFmpeg, Go.
 - Affichage d'un rapport seul (utile avant l'upgrade) ou comparaison de deux rapports.
@@ -18,7 +18,7 @@ Les anciens scripts Bash ne sont **pas inclus dans le dépôt** : ils restent un
 - API strictement **en lecture seule** : `GET /api/runs` et `GET /api/compare?before=...&after=...`.
 - Aucun identifiant Machine ID ou Boot ID issu des logs n'est exporté.
 
-**Non livré actuellement** : lancer/interrompre un benchmark depuis le navigateur, installer des dépendances, collecter la température, exécuter FFmpeg/GPU/stockage depuis Go, calculer automatiquement des médianes.
+**Non livré actuellement** : lancer/interrompre un benchmark depuis le navigateur, installer des dépendances, collecter la température, exécuter GPU/stockage depuis Go, calculer automatiquement des médianes.
 
 ## UX du tableau de bord (PR #3 fusionnée)
 
@@ -28,9 +28,9 @@ Les anciens scripts Bash ne sont **pas inclus dans le dépôt** : ils restent un
 - Les métriques non comparables n'ont pas de graphique de gain. La comparaison reste en lecture seule. Un avertissement signale les sélections inversées chronologiquement, et le bouton « Inverser » corrige leur ordre sans changer les rapports.
 - Les tests JavaScript utilisent le runner natif `node:test` : `node --test tests/*.test.cjs` (Node nécessaire uniquement au développement, pas à l'exécution).
 
-## Exécuter les benchmarks CPU et mémoire (Linux uniquement)
+## Exécuter les benchmarks CPU, mémoire et FFmpeg (Linux uniquement)
 
-Sysbench doit être disponible. Sur Fedora : `sudo dnf install sysbench`. L'application ne l'installe jamais elle-même. La charge CPU sollicite fortement le processeur pendant environ 90 secondes ; la charge mémoire prend environ 30 secondes. Ces durées s’entendent hors préflight, compilation et écriture.
+Sysbench est requis pour CPU/mémoire et FFmpeg avec `ffprobe` et l’encodeur **libx264** pour la vidéo. Sur Fedora, `sudo dnf install sysbench` installe Sysbench ; la disponibilité de libx264 dépend du paquet FFmpeg installé. L'application ne l'installe jamais elle-même. La charge CPU sollicite fortement le processeur pendant environ 90 secondes ; la charge mémoire prend environ 30 secondes. Ces durées s’entendent hors préflight, compilation et écriture.
 
 ```bash
 # Depuis la racine du dépôt
@@ -42,6 +42,14 @@ go run ./cmd/pc-bench run --test memory --label memory_probe --reports "$HOME/T�
 go run ./cmd/pc-bench check --test cpu,memory
 go run ./cmd/pc-bench run --test cpu,memory --label combined_probe --reports "$HOME/Téléchargements"
 go run ./cmd/pc-bench list --reports "$HOME/Téléchargements"
+
+# Vidéo : utiliser l’ORIGINAL de la campagne historique (pas une copie régénérée).
+VIDEO="$HOME/Téléchargements/benchmark_source_ffv1.mkv"
+go run ./cmd/pc-bench check --test ffmpeg --video "$VIDEO"
+go run ./cmd/pc-bench run --test ffmpeg --label video_probe --reports "$HOME/Téléchargements" --video "$VIDEO"
+# Campagne CPU + RAM + FFmpeg, 8 métriques dans un JSON v1 unique :
+go run ./cmd/pc-bench check --test cpu,memory,ffmpeg --video "$VIDEO"
+go run ./cmd/pc-bench run --test cpu,memory,ffmpeg --label complete_probe --reports "$HOME/Téléchargements" --video "$VIDEO"
 ```
 
 - Les **mêmes paramètres CPU et mémoire** que les mesures historiques sont utilisés. La limite mémoire `1T` est un volume de transfert maximal, **pas une allocation de 1 TiB de RAM**. Il n’y a ni charge arbitraire ni installation privilégiée.
@@ -49,6 +57,18 @@ go run ./cmd/pc-bench list --reports "$HOME/Téléchargements"
 - Un **verrou Linux partagé** empêche le CPU et la mémoire de tourner simultanément dans un même répertoire de rapports. Le chemin de verrouillage v1 est conservé pour rester compatible avec les processus CPU plus anciens. Ctrl+C interrompt le runner et son sous-processus direct.
 - Le JSON v1 n'intègre pas encore d'identifiant de protocole : la comparabilité des résultats exige donc de conserver les mêmes paramètres. Voir [revue PR #4](docs/PR4_CPU_RUNNER_ADVERSARIAL_REVIEW.md) et [revue PR #5](docs/PR5_MEMORY_RUNNER_ADVERSARIAL_REVIEW.md).
 - `check` / `run` ne sont pas disponibles sur Windows/macOS. **La consultation des rapports reste portable.**
+
+
+### Contrat vidéo et provenance
+
+- La vidéo historique relevée sur Fedora 44 est **FFV1, 640×360, yuv420p, 30 fps, 20 s**, SHA-256 `ea7ca7ecd8795138031a703e324952653277928bea91208058dea7a6005c44d2`. Vérifier le SHA via la commande `check` avant de comparer les performances avec le i3.
+- L’application **ne crée pas, ne convertit pas et ne modifie pas la source**. L'option `--video` est obligatoire dès que `ffmpeg` est sélectionné ; les liens symboliques et les fichiers hors protocole sont refusés. Le fichier est limité à 512 MiB, et son SHA est revalidé après l'encodage.
+- Le préflight vérifie la présence de FFmpeg/FFprobe, l’existence effective de libx264 (mini-test d’encodage vers `null`), et le format de la source. Tous les préflights sont exécutés avant la campagne pour éviter d’effectuer les mesures CPU puis d’échouer faute d’encodeur vidéo.
+- Comme dans le script v6 : lecture préalable du fichier vidéo pour réchauffer le cache, puis 1/4/8 encodages successifs avec `-nostdin -hide_banner -loglevel info -nostats -benchmark -i … -map 0:v:0 -an -sn -dn -c:v libx264 -preset medium -crf 23 -pix_fmt yuv420p -threads N -f null -`. Les temps en secondes correspondent à des **temps réels d'exécution**, arrondis au millième. Aucun fichier vidéo de sortie n'est créé.
+- Les comparaisons FFmpeg sont marquées **non comparables** si l’empreinte SHA-256 de la vidéo ou la version FFmpeg ne concordent pas. Les builds x264 différents avec une version FFmpeg identique ne sont pas détectables par le schéma JSON v1 actuel : la comparabilité reste donc **indicative**, pas une preuve de protocole strictement identique.
+- Les runtimes Windows/macOS conservent la lecture des rapports, mais pas ces runners. Pas de téléchargement, d'installation ni d’exécution via HTTP.
+
+La revue des limites et de la comparabilité de cette tranche se trouve dans [PR7_FFMPEG_RUNNER_ADVERSARIAL_REVIEW.md](docs/PR7_FFMPEG_RUNNER_ADVERSARIAL_REVIEW.md).
 
 ## Démarrage du visualiseur Fedora (avec le binaire précompilé téléchargé séparément)
 
@@ -91,7 +111,7 @@ La comparaison CLI utilise les **noms des rapports**, et non des chemins arbitra
 1. Le serveur refuse une adresse d'écoute non locale (`0.0.0.0`, adresse LAN...).
 2. Seuls les fichiers réguliers `rapport_*.txt` ou `rapport_*.json` du répertoire choisi sont lus. Les liens symboliques sont ignorés.
 3. Fichiers limités à 4 Mio, maximum 500 rapports. Les rapports JSON v1 sont validés ; un rapport historique sans marqueur final `FIN` reste affiché sans gain certifié.
-4. Pas de lancement de commande depuis une requête HTTP. Les runners CPU/mémoire ne sont accessibles que par la CLI et ne requièrent aucun privilège root.
+4. Pas de lancement de commande depuis une requête HTTP. Les runners CPU/mémoire/FFmpeg ne sont accessibles que par la CLI et ne requièrent aucun privilège root.
 5. Les données de l'interface sont injectées via `textContent`, pas `innerHTML`.
 6. En-têtes HTTP CSP restrictive, `nosniff`, `no-store` et `no-referrer`.
 

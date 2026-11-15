@@ -31,16 +31,16 @@ func main() {
 }
 
 func usage() {
-	fmt.Print(`pc-bench : benchmarks CPU/mémoire Linux et visualisation locale des résultats
+	fmt.Print(`pc-bench : benchmarks CPU/mémoire/FFmpeg Linux et visualisation locale des résultats
 
-  pc-bench check   --test cpu|memory|cpu,memory (préflight sans modification système)
-  pc-bench run     --test cpu|memory|cpu,memory --label avant_upgrade --reports DIR
+  pc-bench check   --test cpu|memory|ffmpeg|cpu,memory,ffmpeg (préflight sans modification système)
+  pc-bench run     --test cpu|memory|ffmpeg|cpu,memory,ffmpeg --label avant_upgrade --reports DIR [--video FICHIER pour ffmpeg]
   pc-bench serve   --reports ~/Téléchargements [--listen 127.0.0.1:8765]
   pc-bench list    --reports ~/Téléchargements
   pc-bench export  --reports ~/Téléchargements --from rapport_...txt
   pc-bench compare --reports ~/Téléchargements --before rapport_...txt --after rapport_...txt
 
-Serveur HTTP en lecture seule. Runners CPU/mémoire disponibles uniquement via CLI, sans root.
+Serveur HTTP en lecture seule. Runners CPU/mémoire/FFmpeg disponibles uniquement via CLI, sans root.
 `)
 }
 
@@ -53,8 +53,9 @@ func run(args []string) error {
 	flags := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 	dir := flags.String("reports", ".", "Répertoire contenant les rapports .txt/.json")
-	testName := flags.String("test", "cpu", "Tests à lancer : cpu, memory ou cpu,memory")
+	testName := flags.String("test", "cpu", "Tests à lancer : cpu, memory, ffmpeg (combinaisons séparées par virgule)")
 	label := flags.String("label", "", "Label de la campagne à créer (run)")
+	video := flags.String("video", "", "Vidéo FFV1 de référence existante, requise pour ffmpeg")
 	listen := flags.String("listen", "127.0.0.1:8765", "Adresse locale HTTP (serve)")
 	before := flags.String("before", "", "Fichier rapport avant")
 	after := flags.String("after", "", "Fichier rapport après")
@@ -75,11 +76,11 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		_, v, err := bench.CheckSysbench()
+		v, err := bench.CheckSelected(context.Background(), selected, *video)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%s benchmark preflight: PASS (sysbench %s)\n", strings.ToUpper(strings.Join(selected, "+")), v)
+		fmt.Printf("%s benchmark preflight: PASS (%s)\n", strings.ToUpper(strings.Join(selected, "+")), v)
 		return nil
 	case "run":
 		selected, err := bench.ParseTests(*testName)
@@ -96,7 +97,7 @@ func run(args []string) error {
 		defer unlock()
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
-		result, err := bench.RunSelected(ctx, *label, selected, func(msg string) { fmt.Println(msg) })
+		result, err := bench.RunSelectedWithVideo(ctx, *label, selected, *video, func(msg string) { fmt.Println(msg) })
 		if err != nil {
 			return err
 		}
