@@ -302,10 +302,21 @@ func Compare(before, after Run) Comparison {
 	if !before.Complete || !after.Complete {
 		c.Warnings = append(c.Warnings, "Campagne incomplète : gains désactivés")
 	}
-	if before.VideoSHA256 == "" || after.VideoSHA256 == "" {
+	// A CPU-only campaign does not require a video source. Warn about video
+	// provenance only when at least one campaign contains FFmpeg metrics.
+	hasVideo := false
+	for _, r := range []Run{before, after} {
+		for _, metric := range r.Metrics {
+			if strings.HasPrefix(metric.Key, "ffmpeg.") {
+				hasVideo = true
+				break
+			}
+		}
+	}
+	if hasVideo && (before.VideoSHA256 == "" || after.VideoSHA256 == "") {
 		c.Warnings = append(c.Warnings, "SHA-256 vidéo manquant : FFmpeg non comparable")
 	}
-	if before.VideoSHA256 != "" && after.VideoSHA256 != "" && before.VideoSHA256 != after.VideoSHA256 {
+	if hasVideo && before.VideoSHA256 != "" && after.VideoSHA256 != "" && before.VideoSHA256 != after.VideoSHA256 {
 		c.Warnings = append(c.Warnings, "Vidéos sources différentes : FFmpeg non comparable")
 	}
 	if before.FFmpeg != "" && after.FFmpeg != "" && before.FFmpeg != after.FFmpeg {
