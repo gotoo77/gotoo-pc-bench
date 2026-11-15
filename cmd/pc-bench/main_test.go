@@ -47,3 +47,20 @@ func TestNonLocalBindRejected(t *testing.T) {
 		t.Fatalf("bind not rejected: %v", err)
 	}
 }
+
+func TestExportCommand(t *testing.T) {
+	d := t.TempDir()
+	content := "========== CONDITIONS DE MESURE ==========\nLabel: test\n========== CPU SYSBENCH ==========\n--- CPU 1 threads ---\nevents per second: 100\n========== FIN ==========\n"
+	if err := os.WriteFile(filepath.Join(d, "rapport_test.txt"), []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"export", "--reports", d, "--from", "rapport_test.txt"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(d, "rapport_test.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"export", "--reports", d, "--from", "../escape.txt"}); err == nil {
+		t.Fatal("accepted traversal")
+	}
+}
