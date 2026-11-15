@@ -1,21 +1,31 @@
 # Gotoo PC Bench - MVP v0.1
 
-Petit tableau de bord local pour **visualiser et comparer** les rapports existants de `benchmark_pc_v5.sh` et `benchmark_pc_v6.sh`.
+**Gotoo PC Bench** est une application locale écrite en Go pour **consulter, analyser et comparer des campagnes de benchmark matériel** depuis une CLI et une interface Web.
 
-Ce dépôt contient actuellement le **visualiseur de résultats**. Les scripts de mesure historiques v5/v6 ne sont pas encore intégrés à la CLI ni au dépôt.
+**État actuel : visualisation et comparaison uniquement.** Le projet importe les rapports texte historiques ainsi que les résultats JSON v1 et peut convertir les premiers vers le second. L'exécution des benchmarks depuis l'application n'est **pas encore implémentée**.
+
+Les scripts Bash historiques ayant servi aux premières mesures ne sont **pas inclus dans ce dépôt** : ils restent des outils externes de compatibilité, pas le moteur du produit.
 
 ## Périmètre livré
 
 - Une application Go, avec serveur HTTP local et ressources HTML/CSS/JS intégrées au binaire via `embed`.
 - Aucun framework ou service externe, aucune base SQL, aucun réseau sortant.
-- Lecture des fichiers `rapport_*.txt` du dossier choisi, affichage de la configuration CPU/RAM/OS et des valeurs de CPU, RAM, FFmpeg, Go.
+- Lecture des fichiers `rapport_*.txt` et `rapport_*.json` du dossier choisi, affichage de la configuration CPU/RAM/OS et des valeurs de CPU, RAM, FFmpeg, Go.
 - Affichage d'un rapport seul (utile avant l'upgrade) ou comparaison de deux rapports.
 - Pour chaque mesure comparable, calcul du gain en pourcentage en tenant compte du sens de la métrique (débit vs durée).
 - Vérifications de comparabilité : vidéo source SHA-256, version FFmpeg, version Sysbench, checksum Go et version Go.
 - API strictement **en lecture seule** : `GET /api/runs` et `GET /api/compare?before=...&after=...`.
 - Aucun identifiant Machine ID ou Boot ID issu des logs n'est exporté.
 
-**Non livré en v0.1** : lancer/interrompre un benchmark depuis le navigateur, installer des dépendances, collecter la température, générer des rapports JSON natifs, calculer automatiquement des médianes.
+**Non livré actuellement** : lancer/interrompre un benchmark depuis le navigateur, installer des dépendances, collecter la température, produire des mesures JSON directement depuis un runner intégré, calculer automatiquement des médianes.
+
+## UX du tableau de bord (PR #3, en cours de validation)
+
+- Les campagnes sont identifiées par leur date, leur label, leur CPU, leur nombre de mesures et leur nom de fichier.
+- Une seule campagne est affichée comme référence tant qu'aucune seconde campagne distincte n'a été sélectionnée. **Aucun gain avant/après n'est calculé automatiquement** entre deux rapports portant le même label.
+- Les métriques sont regroupées par famille et les comparaisons dessinent deux barres de **performance relative** (avant = 100), en plus des valeurs brutes. Pour les métriques de durée (`s`), la performance est l'inverse de la durée, conformément au pourcentage fourni par le serveur.
+- Les métriques non comparables n'ont pas de graphique de gain. La comparaison reste en lecture seule.
+- Les tests JavaScript utilisent le runner natif `node:test` : `node --test tests/*.test.cjs` (Node nécessaire uniquement au développement, pas à l'exécution).
 
 ## Démarrage rapide Fedora (avec le binaire précompilé téléchargé séparément)
 
@@ -56,7 +66,7 @@ La comparaison CLI utilise les **noms des rapports**, et non des chemins arbitra
 ## Invariants de sécurité
 
 1. Le serveur refuse une adresse d'écoute non locale (`0.0.0.0`, adresse LAN...).
-2. Seuls les fichiers réguliers `rapport_*.txt` du répertoire choisi sont lus. Les liens symboliques sont ignorés.
+2. Seuls les fichiers réguliers `rapport_*.txt` et `rapport_*.json` du répertoire choisi sont lus. Les liens symboliques sont ignorés.
 3. Fichiers limités à 4 Mio, maximum 500 rapports. Un rapport sans marqueur final `FIN` reste affiché, mais ses gains ne sont pas certifiés.
 4. Pas de lancement de commande depuis une requête HTTP. Aucun privilège root requis.
 5. Les données de l'interface sont injectées via `textContent`, pas `innerHTML`.
