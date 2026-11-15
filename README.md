@@ -2,14 +2,14 @@
 
 **Gotoo PC Bench** est une application locale écrite en Go pour **consulter, analyser et comparer des campagnes de benchmark matériel** depuis une CLI et une interface Web.
 
-**État actuel : visualisation et comparaison + runners CPU et mémoire Linux en CLI (PR #5, en cours).** Le projet importe les rapports historiques et les résultats JSON v1, et peut convertir les premiers vers le second. Le serveur Web reste **strictement en lecture seule**.
+**État actuel : visualisation et comparaison + runners CPU et mémoire Linux en CLI (PR #5 fusionnée).** Le projet importe les rapports historiques et les résultats JSON v1, et peut convertir les premiers vers le second. Le serveur Web reste **strictement en lecture seule**.
 
 Les anciens scripts Bash ne sont **pas inclus dans le dépôt** : ils restent une source historique de rapports, sans être nécessaires aux nouveaux runners Go.
 
 ## Périmètre livré
 
 - Une application Go, avec serveur HTTP local et ressources HTML/CSS/JS intégrées au binaire via `embed`.
-- Une CLI capable de vérifier Sysbench et d’exécuter deux protocoles fixes sur Linux : **CPU** (1/4/8 threads, 30 s, nombres premiers jusqu’à 10000) et **mémoire en écriture** (1/4 threads, blocs 1 KiB, limite 1 TiB, 15 s), puis d’enregistrer un rapport JSON v1.
+- Une CLI capable de vérifier Sysbench et d’exécuter séparément ou ensemble deux protocoles fixes sur Linux : **CPU** (1/4/8 threads, 30 s, nombres premiers jusqu’à 10000) et **mémoire en écriture** (1/4 threads, blocs 1 KiB, limite 1 TiB, 15 s), puis d’enregistrer un rapport JSON v1.
 - Aucun framework ou service externe, aucune base SQL, aucun réseau sortant.
 - Lecture des fichiers `rapport_*.txt` et `rapport_*.json` du dossier choisi, affichage de la configuration CPU/RAM/OS et des valeurs de CPU, RAM, FFmpeg, Go.
 - Affichage d'un rapport seul (utile avant l'upgrade) ou comparaison de deux rapports.
@@ -25,7 +25,7 @@ Les anciens scripts Bash ne sont **pas inclus dans le dépôt** : ils restent un
 - Les campagnes sont identifiées par leur date, leur label, leur CPU, leur nombre de mesures et leur nom de fichier.
 - Une seule campagne est affichée comme référence tant qu'aucune seconde campagne distincte n'a été sélectionnée. **Aucun gain avant/après n'est calculé automatiquement** entre deux rapports portant le même label.
 - Les métriques sont regroupées par famille et les comparaisons dessinent deux barres de **performance relative** (avant = 100), en plus des valeurs brutes. Pour les métriques de durée (`s`), la performance est l'inverse de la durée, conformément au pourcentage fourni par le serveur.
-- Les métriques non comparables n'ont pas de graphique de gain. La comparaison reste en lecture seule.
+- Les métriques non comparables n'ont pas de graphique de gain. La comparaison reste en lecture seule. Un avertissement signale les sélections inversées chronologiquement, et le bouton « Inverser » corrige leur ordre sans changer les rapports.
 - Les tests JavaScript utilisent le runner natif `node:test` : `node --test tests/*.test.cjs` (Node nécessaire uniquement au développement, pas à l'exécution).
 
 ## Exécuter les benchmarks CPU et mémoire (Linux uniquement)
@@ -38,11 +38,14 @@ go run ./cmd/pc-bench check --test cpu
 go run ./cmd/pc-bench run --test cpu --label cpu_probe --reports "$HOME/Téléchargements"
 go run ./cmd/pc-bench check --test memory
 go run ./cmd/pc-bench run --test memory --label memory_probe --reports "$HOME/Téléchargements"
+# Une seule campagne contenant les cinq mesures CPU + RAM (environ 120 secondes) :
+go run ./cmd/pc-bench check --test cpu,memory
+go run ./cmd/pc-bench run --test cpu,memory --label combined_probe --reports "$HOME/Téléchargements"
 go run ./cmd/pc-bench list --reports "$HOME/Téléchargements"
 ```
 
 - Les **mêmes paramètres CPU et mémoire** que les mesures historiques sont utilisés. La limite mémoire `1T` est un volume de transfert maximal, **pas une allocation de 1 TiB de RAM**. Il n’y a ni charge arbitraire ni installation privilégiée.
-- Les campagnes CPU seules ou mémoire seule sont acceptées par le JSON v1. Un sous-test échoué ne publie aucun rapport.
+- Les campagnes CPU seules, mémoire seule ou CPU + mémoire (5 mesures) sont acceptées par le **même JSON v1**. Dans le mode combiné, le CPU s’exécute avant la RAM, même si les tests sont saisis dans l’autre ordre. Un sous-test échoué, un Ctrl+C ou un timeout ne publie aucun rapport.
 - Un **verrou Linux partagé** empêche le CPU et la mémoire de tourner simultanément dans un même répertoire de rapports. Le chemin de verrouillage v1 est conservé pour rester compatible avec les processus CPU plus anciens. Ctrl+C interrompt le runner et son sous-processus direct.
 - Le JSON v1 n'intègre pas encore d'identifiant de protocole : la comparabilité des résultats exige donc de conserver les mêmes paramètres. Voir [revue PR #4](docs/PR4_CPU_RUNNER_ADVERSARIAL_REVIEW.md) et [revue PR #5](docs/PR5_MEMORY_RUNNER_ADVERSARIAL_REVIEW.md).
 - `check` / `run` ne sont pas disponibles sur Windows/macOS. **La consultation des rapports reste portable.**
@@ -88,7 +91,7 @@ La comparaison CLI utilise les **noms des rapports**, et non des chemins arbitra
 1. Le serveur refuse une adresse d'écoute non locale (`0.0.0.0`, adresse LAN...).
 2. Seuls les fichiers réguliers `rapport_*.txt` ou `rapport_*.json` du répertoire choisi sont lus. Les liens symboliques sont ignorés.
 3. Fichiers limités à 4 Mio, maximum 500 rapports. Les rapports JSON v1 sont validés ; un rapport historique sans marqueur final `FIN` reste affiché sans gain certifié.
-4. Pas de lancement de commande depuis une requête HTTP. Les runners CPU/mémoire ne sont accessibles que par la CLI et ne requiert aucun privilège root.
+4. Pas de lancement de commande depuis une requête HTTP. Les runners CPU/mémoire ne sont accessibles que par la CLI et ne requièrent aucun privilège root.
 5. Les données de l'interface sont injectées via `textContent`, pas `innerHTML`.
 6. En-têtes HTTP CSP restrictive, `nosniff`, `no-store` et `no-referrer`.
 
@@ -123,7 +126,7 @@ Sur l'environnement de développement :
 
 1. Documenter un `protocol_id` pour permettre de vérifier strictement la comparabilité des protocoles de mesures.
 2. Ajouter trois exécutions et la comparaison des médianes, avec conditions de mesure.
-3. Ajouter une orchestration Web explicitement autorisée, avec état de campagne et annulation. Les runners CLI CPU/mémoire sont déjà disponibles.
+3. Ajouter une orchestration Web explicitement autorisée, avec état de campagne et annulation. La sélection combinée CPU + mémoire est déjà disponible uniquement en CLI.
 
 ## Export JSON v1 (PR #2)
 
@@ -134,3 +137,10 @@ La CLI peut exporter un rapport texte historique en document JSON v1, sans suppr
 ```
 
 L'importeur historique reste pris en charge. Lorsque les fichiers `.txt` et `.json` de même base coexistent, un JSON valide est prioritaire ; si le JSON est corrompu, le `.txt` est utilisé. Les chemins arbitraires et l'écrasement de fichiers existants sont refusés. Voir [contrat JSON v1](docs/RESULT_FORMAT_V1.md) et [schéma machine](docs/schema/result-v1.schema.json).
+
+## PR #6 : orchestration minimale et ergonomie (en validation)
+
+- `--test cpu,memory` regroupe cinq mesures dans **un seul rapport JSON v1**, enregistré seulement si les deux runners réussissent. `memory,cpu` est accepté mais l’ordre réel reste CPU puis mémoire.
+- Le verrouillage, la publication atomique, les protocoles fixes et l’absence de commande HTTP restent inchangés.
+- Les avertissements de provenance ne concernent que les familles de métriques **communes** aux deux campagnes. Le tableau de bord permet d’inverser la sélection avant/après et prévient d’une chronologie inversée.
+- Aucun nouveau protocole ni module de plugin. Voir [revue adversariale PR #6](docs/PR6_ORCHESTRATION_ADVERSARIAL_REVIEW.md).

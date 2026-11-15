@@ -104,3 +104,46 @@ esac
 		t.Fatal("unknown runner was accepted")
 	}
 }
+
+func TestCombinedRunnerCLIAtomicAndStrict(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux-only runner")
+	}
+	bin, reports := t.TempDir(), t.TempDir()
+	fake := filepath.Join(bin, "sysbench")
+	code := `#!/bin/sh
+if [ "$1" = "--version" ]; then echo 'sysbench 1.0.20'; exit 0; fi
+case "$*" in
+  cpu*) echo 'events per second: 1234.56';;
+  memory*) if [ "$FAIL_MEMORY" = "1" ]; then exit 29; fi; echo '1024.00 MiB transferred (5000.25 MiB/sec)';;
+  *) exit 19;;
+esac
+`
+	if err := os.WriteFile(fake, []byte(code), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := run([]string{"check", "--reports", reports, "--test", "cpu,memory"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"run", "--reports", reports, "--test", "cpu,memory", "--label", "combined"}); err != nil {
+		t.Fatal(err)
+	}
+	items, err := report.Load(reports)
+	if err != nil || len(items) != 1 || len(items[0].Metrics) != 5 {
+		t.Fatalf("expected one complete campaign with 5 metrics: %+v %v", items, err)
+	}
+	for _, invalid := range []string{"cpu,cpu", "disk,cpu", "cpu,", "CPU"} {
+		if err := run([]string{"run", "--reports", reports, "--test", invalid, "--label", "combined"}); err == nil {
+			t.Fatalf("accepted test selection %q", invalid)
+		}
+	}
+	t.Setenv("FAIL_MEMORY", "1")
+	if err := run([]string{"run", "--reports", reports, "--test", "cpu,memory", "--label", "failing"}); err == nil {
+		t.Fatal("accepted campaign with failed second test")
+	}
+	items, err = report.Load(reports)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("failing campaign left a report: %+v %v", items, err)
+	}
+}

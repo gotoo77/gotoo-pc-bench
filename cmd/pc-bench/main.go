@@ -33,8 +33,8 @@ func main() {
 func usage() {
 	fmt.Print(`pc-bench : benchmarks CPU/mémoire Linux et visualisation locale des résultats
 
-  pc-bench check   --test cpu|memory (préflight sans modification système)
-  pc-bench run     --test cpu|memory --label avant_upgrade --reports DIR
+  pc-bench check   --test cpu|memory|cpu,memory (préflight sans modification système)
+  pc-bench run     --test cpu|memory|cpu,memory --label avant_upgrade --reports DIR
   pc-bench serve   --reports ~/Téléchargements [--listen 127.0.0.1:8765]
   pc-bench list    --reports ~/Téléchargements
   pc-bench export  --reports ~/Téléchargements --from rapport_...txt
@@ -53,7 +53,7 @@ func run(args []string) error {
 	flags := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 	dir := flags.String("reports", ".", "Répertoire contenant les rapports .txt/.json")
-	testName := flags.String("test", "cpu", "Protocole de benchmark (cpu ou memory)")
+	testName := flags.String("test", "cpu", "Tests à lancer : cpu, memory ou cpu,memory")
 	label := flags.String("label", "", "Label de la campagne à créer (run)")
 	listen := flags.String("listen", "127.0.0.1:8765", "Adresse locale HTTP (serve)")
 	before := flags.String("before", "", "Fichier rapport avant")
@@ -71,18 +71,20 @@ func run(args []string) error {
 	}
 	switch cmd {
 	case "check":
-		if *testName != "cpu" && *testName != "memory" {
-			return fmt.Errorf("unknown or unsupported benchmark %q", *testName)
+		selected, err := bench.ParseTests(*testName)
+		if err != nil {
+			return err
 		}
 		_, v, err := bench.CheckSysbench()
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%s benchmark preflight: PASS (sysbench %s)\n", strings.ToUpper(*testName), v)
+		fmt.Printf("%s benchmark preflight: PASS (sysbench %s)\n", strings.ToUpper(strings.Join(selected, "+")), v)
 		return nil
 	case "run":
-		if *testName != "cpu" && *testName != "memory" {
-			return fmt.Errorf("unknown or unsupported benchmark %q", *testName)
+		selected, err := bench.ParseTests(*testName)
+		if err != nil {
+			return err
 		}
 		if *label == "" {
 			return errors.New("--label requis pour run")
@@ -94,12 +96,7 @@ func run(args []string) error {
 		defer unlock()
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
-		var result report.Run
-		if *testName == "memory" {
-			result, err = bench.RunMemory(ctx, *label, func(msg string) { fmt.Println(msg) })
-		} else {
-			result, err = bench.RunCPU(ctx, *label, func(msg string) { fmt.Println(msg) })
-		}
+		result, err := bench.RunSelected(ctx, *label, selected, func(msg string) { fmt.Println(msg) })
 		if err != nil {
 			return err
 		}
@@ -107,7 +104,7 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%s benchmark completed: %s\n", strings.ToUpper(*testName), saved)
+		fmt.Printf("%s benchmark completed: %s\n", strings.ToUpper(strings.Join(selected, "+")), saved)
 		return nil
 	case "serve":
 		host, _, err := net.SplitHostPort(*listen)
