@@ -22,5 +22,11 @@ jobs:
         run: go vet ./...
       - name: Race detector
         run: go test -race ./...
+      - name: JavaScript UI tests
+        run: node --test tests/*.test.cjs
+      - name: JavaScript syntax
+        run: |
+          node --check cmd/pc-bench/web/app.js
+          node --check cmd/pc-bench/web/compare-model.js
       - name: Build
         run: CGO_ENABLED=0 go build -trimpath -o pc-bench ./cmd/pc-bench

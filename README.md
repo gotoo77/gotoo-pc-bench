@@ -17,6 +17,14 @@ Ce dépôt contient actuellement le **visualiseur de résultats**. Les scripts d
 
 **Non livré en v0.1** : lancer/interrompre un benchmark depuis le navigateur, installer des dépendances, collecter la température, générer des rapports JSON natifs, calculer automatiquement des médianes.
 
+## UX du tableau de bord (PR #3, en cours de validation)
+
+- Les campagnes sont identifiées par leur date, leur label, leur CPU, leur nombre de mesures et leur nom de fichier.
+- Une seule campagne est affichée comme référence tant qu'aucune seconde campagne distincte n'a été sélectionnée. **Aucun gain avant/après n'est calculé automatiquement** entre deux rapports portant le même label.
+- Les métriques sont regroupées par famille et les comparaisons dessinent deux barres de **performance relative** (avant = 100), en plus des valeurs brutes. Pour les métriques de durée (`s`), la performance est l'inverse de la durée, conformément au pourcentage fourni par le serveur.
+- Les métriques non comparables n'ont pas de graphique de gain. La comparaison reste en lecture seule.
+- Les tests JavaScript utilisent le runner natif `node:test` : `node --test tests/*.test.cjs` (Node nécessaire uniquement au développement, pas à l'exécution).
+
 ## Démarrage rapide Fedora (avec le binaire précompilé téléchargé séparément)
 
 Télécharger le binaire `pc-bench-linux-amd64` puis, dans le dossier de téléchargement :

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>PC Benchmark · Dashboard</title>
   <link rel="stylesheet" href="/style.css">
+  <script defer src="/compare-model.js"></script>
   <script defer src="/app.js"></script>
 </head>
 <body>
@@ -16,18 +17,19 @@
     <main>
       <section class="intro"><div><p class="eyebrow">PANNEAU DE MESURE</p><h2>Avant. Après.<br><em>Mesuré, pas supposé.</em></h2><p class="lead">Compare des campagnes Sysbench, FFmpeg et Go sans modifier la machine ni lancer de commandes.</p></div><div class="summary" id="summary"><strong>-</strong><span>campagnes disponibles</span></div></section>
       <section class="controls" aria-label="Choix de comparaison">
-        <label>Référence (avant)<select id="before"></select></label>
-        <label>Mesure (après)<select id="after"></select></label>
+        <label for="before">Référence (avant)<select id="before"></select></label>
+        <label for="after">Mesure (après, facultative)<select id="after"></select></label>
         <button id="refresh" type="button" title="Relire les rapports">Actualiser ↻</button>
       </section>
       <p class="status" id="status" role="status">Chargement…</p>
+      <p class="comparison-note" id="comparison-note">Les deux campagnes sont sélectionnées explicitement.</p>
       <section class="machine" id="machine" hidden></section>
       <section id="warnings" class="warnings" aria-live="polite" hidden></section>
       <section id="results" hidden>
-        <div class="section-head"><div><p class="eyebrow">RÉSULTATS</p><h3>Variation des performances</h3></div><p>Positif = amélioration. Les lignes non comparables sont exclues des gains.</p></div>
+        <div class="section-head"><div><p class="eyebrow">RÉSULTATS</p><h3>Performances mesurées</h3></div><p id="chart-legend" hidden>Graphiques : indice de performance relatif, avant = 100. Pour FFmpeg et Go, l’indice est l’inverse du temps. Les valeurs en secondes restent affichées.</p></div>
         <div id="metrics" class="metrics"></div>
       </section>
-      <section id="empty" class="empty" hidden><h3>Aucune comparaison disponible</h3><p>Place les fichiers <code>rapport_*.txt</code> générés par benchmark_pc_v5/v6 dans le dossier passé à <code>--reports</code>, puis actualise.</p></section>
+      <section id="empty" class="empty" hidden><h3>Aucune mesure disponible</h3><p>Place les fichiers <code>rapport_*.txt</code> ou <code>rapport_*.json</code> dans le dossier passé à <code>--reports</code>, puis actualise.</p></section>
     </main>
     <footer>Traitement local · Aucun dépôt de données · Les identifiants machine présents dans les logs originaux ne sont pas affichés</footer>
   </div>
