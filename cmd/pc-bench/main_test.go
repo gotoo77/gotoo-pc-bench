@@ -1,9 +1,11 @@
 package main
 
 import (
+	"github.com/gotoo77/gotoo-pc-bench/internal/report"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -62,5 +64,43 @@ func TestExportCommand(t *testing.T) {
 	}
 	if err := run([]string{"export", "--reports", d, "--from", "../escape.txt"}); err == nil {
 		t.Fatal("accepted traversal")
+	}
+}
+
+// End-to-end CLI dispatch with a fake Sysbench executable. It does not use
+// root and must not create partial reports on failures.
+func TestMemoryRunnerCLI(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux-only runner")
+	}
+	bin := t.TempDir()
+	dir := t.TempDir()
+	fake := filepath.Join(bin, "sysbench")
+	code := `#!/bin/sh
+if [ "$1" = "--version" ]; then echo 'sysbench 1.0.20'; exit 0; fi
+case "$*" in
+  "memory --memory-oper=write --memory-block-size=1K --memory-total-size=1T --threads=1 --time=15 run"|"memory --memory-oper=write --memory-block-size=1K --memory-total-size=1T --threads=4 --time=15 run") echo '1024 MiB transferred (5000.25 MiB/sec)';;
+  *) exit 23;;
+esac
+`
+	if err := os.WriteFile(fake, []byte(code), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := run([]string{"check", "--reports", dir, "--test", "memory"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"run", "--reports", dir, "--test", "memory", "--label", "memory_probe"}); err != nil {
+		t.Fatal(err)
+	}
+	runs, err := report.Load(dir)
+	if err != nil || len(runs) != 1 || len(runs[0].Metrics) != 2 {
+		t.Fatalf("invalid saved memory run: %+v %v", runs, err)
+	}
+	if runs[0].Metrics[0].Key != "ram.1" || runs[0].Metrics[1].Key != "ram.4" {
+		t.Fatalf("wrong metric keys: %+v", runs[0].Metrics)
+	}
+	if err := run([]string{"run", "--reports", dir, "--test", "disk", "--label", "bad"}); err == nil {
+		t.Fatal("unknown runner was accepted")
 	}
 }
