@@ -147,3 +147,63 @@ esac
 		t.Fatalf("failing campaign left a report: %+v %v", items, err)
 	}
 }
+
+func TestFFmpegCLIAtomicAndSourcePrivacy(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux runner")
+	}
+	bin, reports := t.TempDir(), t.TempDir()
+	video := filepath.Join(bin, "video.mkv")
+	if err := os.WriteFile(video, []byte("fixed source for fake ffprobe"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	ff := `#!/bin/sh
+case "$*" in
+  "-version") echo 'ffmpeg version 8.1.3 Copyright fake';;
+  "-hide_banner -encoders") echo ' V....D libx264 H264 encoder';;
+  "-nostdin -hide_banner -loglevel error -f lavfi -i testsrc2=size=64x64:rate=1:duration=1 -frames:v 1 -an -c:v libx264 -threads 1 -f null -") : ;;
+  *) if [ "$BREAK_ENCODE" = 1 ]; then exit 12; fi
+     sleep 0.015
+     echo 'frame=  600 fps=1000 Lsize=N/A' >&2;;
+esac`
+	probe := `#!/bin/sh
+printf '%s\n' 'codec_name=ffv1' 'width=640' 'height=360' 'pix_fmt=yuv420p' 'r_frame_rate=30/1' 'duration=20.000000' 'size=30'`
+	sys := `#!/bin/sh
+if [ "$1" = "--version" ]; then echo 'sysbench 1.0.20'; exit 0; fi
+case "$1" in cpu) echo 'events per second: 1200.00';; memory) echo '1024.00 MiB transferred (5000.25 MiB/sec)';; *) exit 18;; esac`
+	for name, code := range map[string]string{"ffmpeg": ff, "ffprobe": probe, "sysbench": sys} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte(code+"\n"), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := run([]string{"check", "--test", "cpu,memory,ffmpeg", "--reports", reports, "--video", video}); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"run", "--test", "cpu,memory,ffmpeg", "--label", "full", "--reports", reports, "--video", video}); err != nil {
+		t.Fatal(err)
+	}
+	runs, err := report.Load(reports)
+	if err != nil || len(runs) != 1 || len(runs[0].Metrics) != 8 || len(runs[0].VideoSHA256) != 64 {
+		t.Fatalf("expected 8-metric JSON v1 report, got %+v: %v", runs, err)
+	}
+	blob, err := os.ReadFile(filepath.Join(reports, runs[0].ID))
+	if err != nil || strings.Contains(string(blob), video) {
+		t.Fatal("video path leaked in JSON report")
+	}
+	// A failure after 5 successful Sysbench metrics cannot publish a new run.
+	t.Setenv("BREAK_ENCODE", "1")
+	if err := run([]string{"run", "--test", "cpu,memory,ffmpeg", "--label", "failed", "--reports", reports, "--video", video}); err == nil {
+		t.Fatal("accepted failed video encode")
+	}
+	runs, err = report.Load(reports)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("partial result was published: %+v, %v", runs, err)
+	}
+	if err := run([]string{"run", "--test", "ffmpeg", "--label", "missing", "--reports", reports}); err == nil {
+		t.Fatal("video flag not required")
+	}
+	if err := run([]string{"check", "--test", "cpu", "--video", video, "--reports", reports}); err == nil {
+		t.Fatal("video silently accepted for CPU-only")
+	}
+}
