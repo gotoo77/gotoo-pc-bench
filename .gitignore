@@ -1,0 +1,16 @@
+# Executables, test outputs and local builds
+/pc-bench
+/pc-bench-linux-*
+/benchmark_go_test
+*.test
+coverage.out
+/dist/
+
+# Local benchmark data: may expose machine identifiers
+rapport_*.txt
+benchmark_source_ffv1.mkv
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
