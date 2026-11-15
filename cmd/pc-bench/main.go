@@ -32,6 +32,7 @@ func usage() {
 
   pc-bench serve   --reports ~/Téléchargements [--listen 127.0.0.1:8765]
   pc-bench list    --reports ~/Téléchargements
+  pc-bench export  --reports ~/Téléchargements --from rapport_...txt
   pc-bench compare --reports ~/Téléchargements --before rapport_...txt --after rapport_...txt
 
 MVP v0.1 : lecture seule. Aucun benchmark ni commande root lancé.
@@ -50,6 +51,7 @@ func run(args []string) error {
 	listen := flags.String("listen", "127.0.0.1:8765", "Adresse locale HTTP (serve)")
 	before := flags.String("before", "", "Fichier rapport avant")
 	after := flags.String("after", "", "Fichier rapport après")
+	source := flags.String("from", "", "Rapport texte à exporter en JSON")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -77,6 +79,16 @@ func run(args []string) error {
 		server := &http.Server{Handler: newHandler(path), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second}
 		fmt.Printf("PC Benchmark v0.1 - lecture seule\nRapports : %s\nOuvrir : http://%s\nCtrl+C pour quitter\n", path, listener.Addr().String())
 		return server.Serve(listener)
+	case "export":
+		if *source == "" {
+			return errors.New("--from requis")
+		}
+		out, err := report.ExportLegacy(path, *source)
+		if err != nil {
+			return err
+		}
+		fmt.Println("Rapport JSON créé :", out)
+		return nil
 	case "list":
 		runs, err := report.Load(path)
 		if err != nil {

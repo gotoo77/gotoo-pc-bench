@@ -246,35 +246,49 @@ func order(k string) int {
 	return bases[parts[0]] + n
 }
 
-// Load loads bounded regular .txt reports from one flat directory. It never
-// opens symlinks or arbitrary request-selected paths.
+// Load reads historical text and versioned JSON reports from one flat directory.
+// For equal basenames, a valid JSON report wins. A corrupt JSON does not hide
+// the original text report. Neither symlinks nor arbitrary paths are followed.
 func Load(dir string) ([]Run, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
 	runs := make([]Run, 0)
+	seen := make(map[string]bool)
+	// os.ReadDir returns sorted names; .json sorts before .txt for a basename.
 	for _, entry := range entries {
 		if len(runs) >= maxReports {
 			break
 		}
 		name := entry.Name()
-		if !strings.HasPrefix(name, "rapport_") || !strings.HasSuffix(name, ".txt") || !entry.Type().IsRegular() {
+		if !reportID.MatchString(name) || !entry.Type().IsRegular() {
+			continue
+		}
+		stem := strings.TrimSuffix(strings.TrimSuffix(name, ".txt"), ".json")
+		if seen[stem] {
 			continue
 		}
 		info, err := entry.Info()
 		if err != nil || info.Size() > maxReportSize || info.Size() == 0 {
 			continue
 		}
-		file, err := os.Open(filepath.Join(dir, name))
+		f, err := os.Open(filepath.Join(dir, name))
 		if err != nil {
 			continue
 		}
-		run, err := Parse(name, file)
-		file.Close()
-		if err == nil {
-			runs = append(runs, run)
+		var run Run
+		if strings.HasSuffix(name, ".json") {
+			run, err = ParseJSON(name, f)
+		} else {
+			run, err = Parse(name, f)
 		}
+		f.Close()
+		if err != nil {
+			continue
+		}
+		runs = append(runs, run)
+		seen[stem] = true
 	}
 	sort.Slice(runs, func(i, j int) bool { return runs[i].Timestamp > runs[j].Timestamp })
 	return runs, nil
@@ -317,6 +331,9 @@ func Compare(before, after Run) Comparison {
 		}
 		row := MetricDiff{Key: a.Key, Label: a.Label, Before: b.Value, After: a.Value, Unit: a.Unit, Comparable: true}
 		switch {
+		case a.Unit != b.Unit || a.Higher != b.Higher:
+			row.Comparable = false
+			row.Reason = "Unité ou sens de mesure différent"
 		case !before.Complete || !after.Complete:
 			row.Comparable = false
 			row.Reason = "Rapport incomplet"

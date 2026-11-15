@@ -94,3 +94,13 @@ Sur l'environnement de développement :
 1. Standardiser un export JSON atomique et versionné côté benchmark v6+, sans modifier la référence historique.
 2. Ajouter trois exécutions et la comparaison des médianes, avec conditions de mesure.
 3. Seulement ensuite, implémenter `run` et `cancel` côté Go avec liste de commandes autorisées, absence de root et état strict « une campagne à la fois ».
+
+## Export JSON v1 (PR #2)
+
+La CLI peut exporter un rapport texte historique en document JSON v1, sans supprimer ni modifier l'original :
+
+```bash
+./pc-bench export --reports "$HOME/Téléchargements" --from rapport_avant_upgrade_20261115_142331.txt
+```
+
+L'importeur historique reste pris en charge. Lorsque les fichiers `.txt` et `.json` de même base coexistent, un JSON valide est prioritaire ; si le JSON est corrompu, le `.txt` est utilisé. Les chemins arbitraires et l'écrasement de fichiers existants sont refusés. Voir [contrat JSON v1](docs/RESULT_FORMAT_V1.md) et [schéma machine](docs/schema/result-v1.schema.json).
