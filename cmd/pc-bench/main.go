@@ -24,6 +24,13 @@ import (
 var assets embed.FS
 
 func main() {
+	if len(os.Args) >= 2 && os.Args[1] == bench.SHAWorkerCommand {
+		if err := bench.RunSHAChild(os.Args[2:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "Erreur:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "Erreur:", err)
 		os.Exit(1)
@@ -31,16 +38,16 @@ func main() {
 }
 
 func usage() {
-	fmt.Print(`pc-bench : benchmarks CPU/mémoire/FFmpeg Linux et visualisation locale des résultats
+	fmt.Print(`pc-bench : benchmarks CPU/mémoire/FFmpeg/Go SHA-256 Linux et visualisation locale des résultats
 
-  pc-bench check   --test cpu|memory|ffmpeg|cpu,memory,ffmpeg (préflight sans modification système)
-  pc-bench run     --test cpu|memory|ffmpeg|cpu,memory,ffmpeg --label avant_upgrade --reports DIR [--video FICHIER pour ffmpeg]
+  pc-bench check   --test cpu|memory|ffmpeg|go|cpu,memory,ffmpeg,go (préflight sans modification système)
+  pc-bench run     --test cpu|memory|ffmpeg|go|cpu,memory,ffmpeg,go --label avant_upgrade --reports DIR [--video FICHIER pour ffmpeg]
   pc-bench serve   --reports ~/Téléchargements [--listen 127.0.0.1:8765]
   pc-bench list    --reports ~/Téléchargements
   pc-bench export  --reports ~/Téléchargements --from rapport_...txt
   pc-bench compare --reports ~/Téléchargements --before rapport_...txt --after rapport_...txt
 
-Serveur HTTP en lecture seule. Runners CPU/mémoire/FFmpeg disponibles uniquement via CLI, sans root.
+Serveur HTTP en lecture seule. Runners CPU/mémoire/FFmpeg/Go disponibles uniquement via CLI, sans root.
 `)
 }
 
@@ -53,7 +60,7 @@ func run(args []string) error {
 	flags := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 	dir := flags.String("reports", ".", "Répertoire contenant les rapports .txt/.json")
-	testName := flags.String("test", "cpu", "Tests à lancer : cpu, memory, ffmpeg (combinaisons séparées par virgule)")
+	testName := flags.String("test", "cpu", "Tests à lancer : cpu, memory, ffmpeg, go (combinaisons séparées par virgule)")
 	label := flags.String("label", "", "Label de la campagne à créer (run)")
 	video := flags.String("video", "", "Vidéo FFV1 de référence existante, requise pour ffmpeg")
 	listen := flags.String("listen", "127.0.0.1:8765", "Adresse locale HTTP (serve)")

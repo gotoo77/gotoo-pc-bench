@@ -207,3 +207,22 @@ case "$1" in cpu) echo 'events per second: 1200.00';; memory) echo '1024.00 MiB 
 		t.Fatal("video silently accepted for CPU-only")
 	}
 }
+
+// Go preflight must use the compiled binary, not rely on a Go compiler or
+// a Sysbench/FFmpeg tool from PATH. Full 8-GiB workloads belong to smoke tests.
+func TestGoSHACheckCLIWithoutExternalTools(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Go benchmark is Linux only")
+	}
+	dir := t.TempDir()
+	t.Setenv("PATH", t.TempDir())
+	if err := run([]string{"check", "--reports", dir, "--test", "go"}); err != nil {
+		t.Fatalf("native Go preflight needs external dependencies: %v", err)
+	}
+	if err := run([]string{"check", "--reports", dir, "--test", "go,go"}); err == nil {
+		t.Fatal("duplicate Go runner accepted")
+	}
+	if err := run([]string{"check", "--reports", dir, "--test", "go", "--video", "/tmp/unused"}); err == nil {
+		t.Fatal("Go-only preflight accepted unrelated video")
+	}
+}
