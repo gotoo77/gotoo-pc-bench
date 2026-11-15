@@ -27,11 +27,11 @@ const cpuDuration = "30"
 var cpuSpeeds = regexp.MustCompile(`(?m)^\s*events per second:\s*([0-9]+(?:\.[0-9]+)?)\s*$`)
 var versionPattern = regexp.MustCompile(`^sysbench\s+(\S+)`)
 
-// CheckCPU fails closed when the requested platform or benchmark executable
-// is unsupported. It never installs dependencies or modifies system settings.
-func CheckCPU() (string, string, error) {
+// CheckSysbench verifies the executable and version for built-in CPU/RAM tests.
+// It does not run the workload or install system packages.
+func CheckSysbench() (string, string, error) {
 	if runtime.GOOS != "linux" {
-		return "", "", fmt.Errorf("CPU runner not supported on %s; only report viewing is portable today", runtime.GOOS)
+		return "", "", fmt.Errorf("benchmark runner not supported on %s; only report viewing is portable today", runtime.GOOS)
 	}
 	path, err := exec.LookPath("sysbench")
 	if err != nil {
@@ -50,11 +50,22 @@ func CheckCPU() (string, string, error) {
 	return path, m[1], nil
 }
 
+// CheckCPU retains the CPU runner preflight API.
+func CheckCPU() (string, string, error) { return CheckSysbench() }
+
+// validateLabel is shared by the two built-in Sysbench runners.
+func validateLabel(label string) error {
+	if label == "" || len(label) > 128 || !regexp.MustCompile(`^[A-Za-z0-9_-]+$`).MatchString(label) {
+		return errors.New("label must contain 1..128 ASCII letters, digits, underscores or hyphens")
+	}
+	return nil
+}
+
 // RunCPU uses exactly the parameters from benchmark_pc_v6.sh for CPU.
 // The runner permits only this fixed protocol and only these thread counts.
 func RunCPU(ctx context.Context, label string, status func(string)) (report.Run, error) {
-	if label == "" || len(label) > 128 || !regexp.MustCompile(`^[A-Za-z0-9_-]+$`).MatchString(label) {
-		return report.Run{}, errors.New("label must contain 1..128 ASCII letters, digits, underscores or hyphens")
+	if err := validateLabel(label); err != nil {
+		return report.Run{}, err
 	}
 	path, version, err := CheckCPU()
 	if err != nil {

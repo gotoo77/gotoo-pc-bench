@@ -4,6 +4,8 @@ package bench
 
 import "errors"
 
-func LockCPU(string) (func() error, error) {
-	return nil, errors.New("CPU runner available only on Linux")
+func LockBenchmark(string) (func() error, error) {
+	return nil, errors.New("benchmark runner available only on Linux")
 }
+
+func LockCPU(dir string) (func() error, error) { return LockBenchmark(dir) }

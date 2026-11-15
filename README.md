@@ -2,14 +2,14 @@
 
 **Gotoo PC Bench** est une application locale écrite en Go pour **consulter, analyser et comparer des campagnes de benchmark matériel** depuis une CLI et une interface Web.
 
-**État actuel : visualisation et comparaison + premier runner CPU Linux en CLI (PR #4).** Le projet importe les rapports historiques et les résultats JSON v1, et peut convertir les premiers vers le second. Le serveur Web reste **strictement en lecture seule**.
+**État actuel : visualisation et comparaison + runners CPU et mémoire Linux en CLI (PR #5, en cours).** Le projet importe les rapports historiques et les résultats JSON v1, et peut convertir les premiers vers le second. Le serveur Web reste **strictement en lecture seule**.
 
-Les anciens scripts Bash ne sont **pas inclus dans le dépôt** : ils restent une source historique de rapports, sans être nécessaires au nouveau runner CPU.
+Les anciens scripts Bash ne sont **pas inclus dans le dépôt** : ils restent une source historique de rapports, sans être nécessaires aux nouveaux runners Go.
 
 ## Périmètre livré
 
 - Une application Go, avec serveur HTTP local et ressources HTML/CSS/JS intégrées au binaire via `embed`.
-- Une CLI capable de vérifier Sysbench et d'exécuter **un protocole CPU prédéfini sur Linux** (1/4/8 threads, 30 s, limite 10000), puis d'enregistrer un rapport JSON v1.
+- Une CLI capable de vérifier Sysbench et d’exécuter deux protocoles fixes sur Linux : **CPU** (1/4/8 threads, 30 s, nombres premiers jusqu’à 10000) et **mémoire en écriture** (1/4 threads, blocs 1 KiB, limite 1 TiB, 15 s), puis d’enregistrer un rapport JSON v1.
 - Aucun framework ou service externe, aucune base SQL, aucun réseau sortant.
 - Lecture des fichiers `rapport_*.txt` et `rapport_*.json` du dossier choisi, affichage de la configuration CPU/RAM/OS et des valeurs de CPU, RAM, FFmpeg, Go.
 - Affichage d'un rapport seul (utile avant l'upgrade) ou comparaison de deux rapports.
@@ -18,7 +18,7 @@ Les anciens scripts Bash ne sont **pas inclus dans le dépôt** : ils restent un
 - API strictement **en lecture seule** : `GET /api/runs` et `GET /api/compare?before=...&after=...`.
 - Aucun identifiant Machine ID ou Boot ID issu des logs n'est exporté.
 
-**Non livré actuellement** : lancer/interrompre un benchmark depuis le navigateur, installer des dépendances, collecter la température, exécuter RAM/FFmpeg/GPU/stockage depuis Go, calculer automatiquement des médianes.
+**Non livré actuellement** : lancer/interrompre un benchmark depuis le navigateur, installer des dépendances, collecter la température, exécuter FFmpeg/GPU/stockage depuis Go, calculer automatiquement des médianes.
 
 ## UX du tableau de bord (PR #3 fusionnée)
 
@@ -28,21 +28,23 @@ Les anciens scripts Bash ne sont **pas inclus dans le dépôt** : ils restent un
 - Les métriques non comparables n'ont pas de graphique de gain. La comparaison reste en lecture seule.
 - Les tests JavaScript utilisent le runner natif `node:test` : `node --test tests/*.test.cjs` (Node nécessaire uniquement au développement, pas à l'exécution).
 
-## Exécuter un premier benchmark CPU (Linux uniquement, PR #4)
+## Exécuter les benchmarks CPU et mémoire (Linux uniquement)
 
-Sysbench doit être disponible. Sur Fedora : `sudo dnf install sysbench`. L'application ne l'installe jamais elle-même. La charge sollicite fortement le CPU et dure environ 90 secondes (hors préflight et écriture).
+Sysbench doit être disponible. Sur Fedora : `sudo dnf install sysbench`. L'application ne l'installe jamais elle-même. La charge CPU sollicite fortement le processeur pendant environ 90 secondes ; la charge mémoire prend environ 30 secondes. Ces durées s’entendent hors préflight, compilation et écriture.
 
 ```bash
 # Depuis la racine du dépôt
 go run ./cmd/pc-bench check --test cpu
 go run ./cmd/pc-bench run --test cpu --label cpu_probe --reports "$HOME/Téléchargements"
+go run ./cmd/pc-bench check --test memory
+go run ./cmd/pc-bench run --test memory --label memory_probe --reports "$HOME/Téléchargements"
 go run ./cmd/pc-bench list --reports "$HOME/Téléchargements"
 ```
 
-- Les **mêmes paramètres CPU** que les mesures historiques sont utilisés. Il n'y a pour le moment ni options arbitraires de charge ni installation privilégiée.
-- Les campagnes CPU seules sont acceptées par le JSON v1. Elles ne comportent pas de métriques RAM/FFmpeg/Go. Un sous-test échoué n'écrit aucun rapport.
-- Un verrou Linux empêche deux exécutions CPU de l'application en parallèle. Ctrl+C arrête le runner et ses sous-processus directs.
-- Le JSON v1 n'intègre pas encore d'identifiant de protocole : la comparabilité des résultats exige donc de conserver les mêmes paramètres. Voir [revue PR #4](docs/PR4_CPU_RUNNER_ADVERSARIAL_REVIEW.md).
+- Les **mêmes paramètres CPU et mémoire** que les mesures historiques sont utilisés. La limite mémoire `1T` est un volume de transfert maximal, **pas une allocation de 1 TiB de RAM**. Il n’y a ni charge arbitraire ni installation privilégiée.
+- Les campagnes CPU seules ou mémoire seule sont acceptées par le JSON v1. Un sous-test échoué ne publie aucun rapport.
+- Un **verrou Linux partagé** empêche le CPU et la mémoire de tourner simultanément dans un même répertoire de rapports. Le chemin de verrouillage v1 est conservé pour rester compatible avec les processus CPU plus anciens. Ctrl+C interrompt le runner et son sous-processus direct.
+- Le JSON v1 n'intègre pas encore d'identifiant de protocole : la comparabilité des résultats exige donc de conserver les mêmes paramètres. Voir [revue PR #4](docs/PR4_CPU_RUNNER_ADVERSARIAL_REVIEW.md) et [revue PR #5](docs/PR5_MEMORY_RUNNER_ADVERSARIAL_REVIEW.md).
 - `check` / `run` ne sont pas disponibles sur Windows/macOS. **La consultation des rapports reste portable.**
 
 ## Démarrage du visualiseur Fedora (avec le binaire précompilé téléchargé séparément)
@@ -84,9 +86,9 @@ La comparaison CLI utilise les **noms des rapports**, et non des chemins arbitra
 ## Invariants de sécurité
 
 1. Le serveur refuse une adresse d'écoute non locale (`0.0.0.0`, adresse LAN...).
-2. Seuls les fichiers réguliers `rapport_*.txt` du répertoire choisi sont lus. Les liens symboliques sont ignorés.
+2. Seuls les fichiers réguliers `rapport_*.txt` ou `rapport_*.json` du répertoire choisi sont lus. Les liens symboliques sont ignorés.
 3. Fichiers limités à 4 Mio, maximum 500 rapports. Les rapports JSON v1 sont validés ; un rapport historique sans marqueur final `FIN` reste affiché sans gain certifié.
-4. Pas de lancement de commande depuis une requête HTTP. Le runner CPU n'est accessible que par la CLI et ne requiert aucun privilège root.
+4. Pas de lancement de commande depuis une requête HTTP. Les runners CPU/mémoire ne sont accessibles que par la CLI et ne requiert aucun privilège root.
 5. Les données de l'interface sont injectées via `textContent`, pas `innerHTML`.
 6. En-têtes HTTP CSP restrictive, `nosniff`, `no-store` et `no-referrer`.
 
@@ -119,9 +121,9 @@ Sur l'environnement de développement :
 
 ## Étapes futures (non implémentées)
 
-1. Standardiser un export JSON atomique et versionné côté benchmark v6+, sans modifier la référence historique.
+1. Documenter un `protocol_id` pour permettre de vérifier strictement la comparabilité des protocoles de mesures.
 2. Ajouter trois exécutions et la comparaison des médianes, avec conditions de mesure.
-3. Ajouter une orchestration Web explicitement autorisée, avec état de campagne et annulation. La CLI CPU seule est déjà disponible.
+3. Ajouter une orchestration Web explicitement autorisée, avec état de campagne et annulation. Les runners CLI CPU/mémoire sont déjà disponibles.
 
 ## Export JSON v1 (PR #2)
 

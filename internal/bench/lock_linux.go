@@ -9,9 +9,10 @@ import (
 	"syscall"
 )
 
-// LockCPU prevents overlapping CPU measurements across separate CLI processes.
+// LockBenchmark prevents any overlapping CPU or RAM runs across CLI processes.
 // Kernel flock locks are automatically released on exit, including crashes.
-func LockCPU(dir string) (func() error, error) {
+func LockBenchmark(dir string) (func() error, error) {
+	// Keep the v1 lock path, so an older CPU-only CLI also conflicts.
 	p := filepath.Join(dir, ".pc-bench-cpu.lock")
 	st, err := os.Lstat(p)
 	if err == nil && !st.Mode().IsRegular() {
@@ -26,7 +27,7 @@ func LockCPU(dir string) (func() error, error) {
 	}
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		f.Close()
-		return nil, fmt.Errorf("another CPU benchmark may already be running: %w", err)
+		return nil, fmt.Errorf("another benchmark may already be running: %w", err)
 	}
 	return func() error {
 		err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
@@ -37,3 +38,6 @@ func LockCPU(dir string) (func() error, error) {
 		return returnErr
 	}, nil
 }
+
+// LockCPU retains the existing internal API for the CPU runner tests.
+func LockCPU(dir string) (func() error, error) { return LockBenchmark(dir) }
