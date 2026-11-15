@@ -17,7 +17,8 @@ func TestGoComparabilityRequiresVersionAndChecksum(t *testing.T) {
 	}
 	original := newer
 	original.Label = "historic"
-	original.Go = "go1.26.10-X:nodwarf5 linux/amd64" // value parsed from reference i3 report
+	original.Go = "go1.26.10-X:nodwarf5 linux/amd64" // version in the historical i3 report
+	newer.Go = "go1.26.11 linux/amd64"               // deliberately different, regardless of the test host toolchain
 	diff := report.Compare(original, newer)
 	if len(diff.Rows) != 3 {
 		t.Fatalf("unexpected shared metrics: %+v", diff.Rows)
