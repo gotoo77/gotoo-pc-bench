@@ -36,6 +36,12 @@
     const a = ids.has(after) && after !== b ? after : '';
     return {before: b, after: a};
   }
+  function chronologyWarning(before, after) {
+    if (!before?.timestamp || !after?.timestamp) return '';
+    const first = Date.parse(before.timestamp), second = Date.parse(after.timestamp);
+    if (!Number.isFinite(first) || !Number.isFinite(second) || first <= second) return '';
+    return 'La campagne AVANT est plus récente que la campagne APRÈS : vérifie le sens de la comparaison (ou inverse la sélection).';
+  }
   function metricLabel(label) {
     return String(label || '').replace(/\b1 threads\b/g, '1 thread').replace(/\b1 workers\b/g, '1 worker');
   }
@@ -47,7 +53,7 @@
     return {beforeIndex: baseline, afterIndex: after,
       beforeWidth: baseline / scale * 100, afterWidth: after / scale * 100};
   }
-  const result = {sections, category, grouped, campaignText, initialSelection, metricLabel, performanceBars};
+  const result = {sections, category, grouped, campaignText, initialSelection, chronologyWarning, metricLabel, performanceBars};
   root.PCBenchModel = result;
   if (typeof module !== 'undefined' && module.exports) module.exports = result;
 })(typeof globalThis === 'object' ? globalThis : this);

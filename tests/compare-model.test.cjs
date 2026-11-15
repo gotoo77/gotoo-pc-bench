@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {campaignText, category, grouped, initialSelection, metricLabel, performanceBars} = require('../cmd/pc-bench/web/compare-model.js');
+const {campaignText, category, grouped, initialSelection, chronologyWarning, metricLabel, performanceBars} = require('../cmd/pc-bench/web/compare-model.js');
 const run = (id,label='avant_upgrade') => ({id,label, cpu:'Intel(R) Core(TM) i3-4130 CPU @ 3.40GHz',timestamp:'2026-11-15T14:23:31+01:00',metrics:[{key:'go.1'}]});
 test('two before_upgrade reports never auto-create a before/after comparison', () => {
   const a=run('rapport_avant_upgrade_a.json');
@@ -47,4 +47,13 @@ test('reference defaults to latest before-upgrade campaign and uses singular uni
   assert.deepEqual(initialSelection([after,before], '', ''), {before:before.id,after:''});
   assert.equal(metricLabel('CPU · 1 threads'), 'CPU · 1 thread');
   assert.equal(metricLabel('Go SHA-256 · 1 workers'), 'Go SHA-256 · 1 worker');
+});
+
+test('comparison direction warning uses timestamps and respects timezone offsets', () => {
+  const newer = {...run('rapport_new.json'), timestamp:'2026-11-15T15:05:00+01:00'};
+  const older = {...run('rapport_old.json'), timestamp:'2026-11-15T14:23:00+01:00'};
+  assert.match(chronologyWarning(newer, older), /AVANT est plus récente/);
+  assert.equal(chronologyWarning(older, newer), '');
+  assert.equal(chronologyWarning({...newer, timestamp:'not-a-date'}, older), '');
+  assert.equal(chronologyWarning({...newer, timestamp:'2026-11-15T13:05:00Z'}, older), '');
 });

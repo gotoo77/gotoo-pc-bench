@@ -30,3 +30,6 @@
 .chart-fill.regression{background:#e58c87}
 .metric .reason{margin-bottom:0}
 @media(max-width:720px){.group-grid{grid-template-columns:1fr}.group-head{display:block}.machine p{grid-template-columns:minmax(100px,170px) minmax(0,1fr)}}
+
+/* A comparison direction can be reversed without reselecting long filenames. */
+#swap:disabled{opacity:.45;cursor:not-allowed}

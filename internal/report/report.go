@@ -302,38 +302,36 @@ func Compare(before, after Run) Comparison {
 	if !before.Complete || !after.Complete {
 		c.Warnings = append(c.Warnings, "Campagne incomplète : gains désactivés")
 	}
-	// A CPU-only campaign does not require a video source. Warn about video
-	// provenance only when at least one campaign contains FFmpeg metrics.
-	hasVideo := false
-	for _, r := range []Run{before, after} {
-		for _, metric := range r.Metrics {
-			if strings.HasPrefix(metric.Key, "ffmpeg.") {
-				hasVideo = true
-				break
-			}
+	// Provenance warnings only concern metric families shared by both runs.
+	// A CPU-only comparison against a full historical report has no video
+	// metric in common and must not emit an unrelated FFmpeg warning.
+	bm := make(map[string]Metric, len(before.Metrics))
+	for _, metric := range before.Metrics {
+		bm[metric.Key] = metric
+	}
+	common := map[string]bool{}
+	for _, metric := range after.Metrics {
+		if _, ok := bm[metric.Key]; ok {
+			common[strings.SplitN(metric.Key, ".", 2)[0]] = true
 		}
 	}
-	if hasVideo && (before.VideoSHA256 == "" || after.VideoSHA256 == "") {
+	if common["ffmpeg"] && (before.VideoSHA256 == "" || after.VideoSHA256 == "") {
 		c.Warnings = append(c.Warnings, "SHA-256 vidéo manquant : FFmpeg non comparable")
 	}
-	if hasVideo && before.VideoSHA256 != "" && after.VideoSHA256 != "" && before.VideoSHA256 != after.VideoSHA256 {
+	if common["ffmpeg"] && before.VideoSHA256 != "" && after.VideoSHA256 != "" && before.VideoSHA256 != after.VideoSHA256 {
 		c.Warnings = append(c.Warnings, "Vidéos sources différentes : FFmpeg non comparable")
 	}
-	if before.FFmpeg != "" && after.FFmpeg != "" && before.FFmpeg != after.FFmpeg {
+	if common["ffmpeg"] && before.FFmpeg != "" && after.FFmpeg != "" && before.FFmpeg != after.FFmpeg {
 		c.Warnings = append(c.Warnings, "Versions FFmpeg différentes : comparaison FFmpeg indicative uniquement")
 	}
-	if before.Sysbench != "" && after.Sysbench != "" && before.Sysbench != after.Sysbench {
+	if (common["cpu"] || common["ram"]) && before.Sysbench != "" && after.Sysbench != "" && before.Sysbench != after.Sysbench {
 		c.Warnings = append(c.Warnings, "Versions Sysbench différentes : comparaison synthétique indicative")
 	}
-	if before.Go != "" && after.Go != "" && before.Go != after.Go {
+	if common["go"] && before.Go != "" && after.Go != "" && before.Go != after.Go {
 		c.Warnings = append(c.Warnings, "Versions Go différentes : comparaison Go indicative")
 	}
-	if before.GoChecksum != "" && after.GoChecksum != "" && before.GoChecksum != after.GoChecksum {
+	if common["go"] && before.GoChecksum != "" && after.GoChecksum != "" && before.GoChecksum != after.GoChecksum {
 		c.Warnings = append(c.Warnings, "Checksums Go différents : comparaison Go invalide")
-	}
-	bm := map[string]Metric{}
-	for _, m := range before.Metrics {
-		bm[m.Key] = m
 	}
 	for _, a := range after.Metrics {
 		b, found := bm[a.Key]

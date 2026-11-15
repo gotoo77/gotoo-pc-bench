@@ -30,6 +30,7 @@ function updateAfterOptions(selected) {
   const valid = selected && selected !== $('before').value && runs.some(run => run.id === selected);
   setOptions(after, runs, valid ? selected : '');
   after.disabled = runs.length < 2;
+  $('swap').disabled = !valid;
 }
 function machineCard(title, run) {
   const container = element('div', '', 'box');
@@ -133,6 +134,8 @@ function showComparison(cmp) {
   $('machine').hidden = false;
   const warnings = [...(cmp.before.warnings || []), ...(cmp.after.warnings || []), ...(cmp.warnings || [])];
   if (cmp.before.label === cmp.after.label) warnings.push('Ces rapports portent la même étiquette : vérifie qu’il s’agit bien d’un avant et d’un après distincts.');
+  const chronological = model.chronologyWarning(cmp.before, cmp.after);
+  if (chronological) warnings.push(chronological);
   showWarnings(warnings);
   $('comparison-note').textContent = 'Deux campagnes différentes. Les gains indiquent une amélioration de performance : positif = mieux.';
   $('chart-legend').hidden = false;
@@ -186,6 +189,16 @@ async function refresh() {
   }
 }
 $('refresh').addEventListener('click', refresh);
+$('swap').addEventListener('click', () => {
+  const before = $('before').value, after = $('after').value;
+  if (!before || !after || before === after) return;
+  setOptions($('before'), runs, after);
+  updateAfterOptions(before);
+  compare();
+});
 $('before').addEventListener('change', () => { updateAfterOptions($('after').value); compare(); });
-$('after').addEventListener('change', compare);
+$('after').addEventListener('change', () => {
+  $('swap').disabled = !$('after').value || $('after').value === $('before').value;
+  compare();
+});
 refresh();
